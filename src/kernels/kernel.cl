@@ -26,69 +26,66 @@ __kernel void integrate(__global float4* position, __global float4* velocity, __
 
 
 
-__kernel void forces(__global const float4* position, __global const float4* velocity, __global float4* acceleration, __global const float* masses,const float G, uint num)
+__kernel void forces(__global const float4* position,
+                     __global const float4* velocity,
+                     __global float4* acceleration,
+                     __global const float* masses,
+                     const float G)
 {
-    uint gid = get_global_id(0);
+    const uint id1 = get_global_id(0);
+    const uint id2 = get_global_id(1);
 
-    for(uint j = 0; j < num;j++)
+
+
+    if(id1 != id2)
     {
-        if(j != gid)
-        {
-            const float4 Fg = gravity(position[gid], position[j], masses[gid], masses[j], G);
-            acceleration[gid] = Fg / masses[gid];
-        }
-    }
-}
-
-__kernel void collisions(__global const float4* position, __global const float4* velocity, __global float4* acceleration, __global const float* sizes, __global const float* masses, const uint num)
-{
-    const uint gid = get_global_id(0);
-
-    for(uint j = 0; j < num;j++)
-    {
-        if(j != gid)
-        {
-            const bool collision = collision_detect(position[gid], position[j], sizes[gid],sizes[j]);
-            if(collision)
-            {
-                const float m1 = masses[gid];
-                const float m2 = masses[j];
-                const float m1_m2 = m1 +m2;
-                const float dis = distance(position[j], position[gid]);
-                const float distance_factor = (sizes[gid] + sizes[j])/dis;
-
-                acceleration[gid] -=  normalize(velocity[gid]) *distance_factor;
-                acceleration[j] -= normalize(velocity[j]) * distance_factor;
-
-            }
-        }
+        const float4 Fg = gravity(position[id1], position[id2], masses[id1], masses[id2], G);
+        acceleration[id1] = Fg / masses[id1];
     }
 
 }
 
-__kernel void limit(__global const float4* position, __global float4* velocity, float size)
+__kernel void collisions(__global const float4* position,
+                         __global const float4* velocity,
+                         __global float4* acceleration,
+                         __global const float* sizes,
+                         __global const float* masses)
+{
+    const uint id1 = get_global_id(0);
+    const uint id2 = get_global_id(1);
+
+
+    if(id1 != id2)
+    {
+        const bool collision = collision_detect(position[id1], position[id2], sizes[id1],sizes[id2]);
+        if(collision)
+        {
+            const float m1 = masses[id1];
+            const float m2 = masses[id2];
+            const float m1_m2 = m1 +m2;
+            const float dis = distance(position[id1], position[id2]);
+            const float distance_factor = (sizes[id1] + sizes[id2])/dis;
+
+            acceleration[id1] -=  normalize(velocity[id1]) *distance_factor;
+            acceleration[id2] -= normalize(velocity[id2]) * distance_factor;
+
+        }
+    }
+
+
+}
+
+__kernel void limit(__global float4* position, __global float4* velocity, float size)
 {
     uint gid = get_global_id(0);
 
     if(fabs(position[gid].x) > size)
+    {
         velocity[gid].x *= -1;
+    }
     if(fabs(position[gid].y) > size)
         velocity[gid].y *= -1;
     if(fabs(position[gid].z) > size)
         velocity[gid].z *= -1;
 }
 
-__kernel void steps(__global float4* position, __global float4* velocity, __global float4* acceleration, __global const float* masses, __global const float* sizes,const float G,const float dt, const uint step_count, uint num)
-{
-    for(uint i = 0; i < step_count;i++)
-    {
-        forces(position, velocity, acceleration,masses, G, num);
-        //barrier(CLK_GLOBAL_MEM_FENCE);
-        collisions(position, velocity, acceleration, sizes,masses, num);
-       // barrier(CLK_GLOBAL_MEM_FENCE);
-        limit(position, velocity, 3);
-      //  barrier(CLK_GLOBAL_MEM_FENCE);
-        integrate(position, velocity, acceleration,dt);
-       // barrier(CLK_GLOBAL_MEM_FENCE);
-    }
-}

@@ -22,9 +22,9 @@ public:
     static constexpr float k0 = 1.0 / (4.0 * M_PI * e0 );
     static constexpr float fric = 0.999;
 
-    static constexpr std::size_t particles = 3000;
+    static constexpr std::size_t particles = 1000;
     static constexpr float space_size = 3;
-    static constexpr float dt = 0.01;
+    static constexpr float dt = 0.001;
     std::array<cl_float4, particles> positions;
     std::array<cl_float4, particles> velocities;
     std::array<cl_float4, particles> accelerations;
@@ -43,14 +43,19 @@ public:
     cl::Context m_context;
     cl::CommandQueue m_queue;
 
-    typedef cl::KernelFunctor<cl::Buffer,cl::Buffer, cl::Buffer,cl::Buffer,float, cl_uint> forces_kernel_t  ;
+    typedef cl::KernelFunctor<cl::Buffer,cl::Buffer, cl::Buffer,cl::Buffer,float> forces_kernel_t  ;
     std::unique_ptr<forces_kernel_t> m_forces_func;
 
     typedef cl::KernelFunctor<cl::Buffer, cl::Buffer, cl::Buffer,float> integrate_kernel_t ;
     std::unique_ptr<integrate_kernel_t> m_integrate_func;
 
-    typedef cl::KernelFunctor<cl::Buffer, cl::Buffer, cl::Buffer,cl::Buffer,cl::Buffer, float,float, cl_uint, cl_uint> steps_kernel_t;
-    std::unique_ptr<steps_kernel_t> m_steps_func;
+
+
+    typedef cl::KernelFunctor<cl::Buffer,cl::Buffer, float> limit_kernel_t;
+    std::unique_ptr<limit_kernel_t> m_limit_func;
+
+    typedef cl::KernelFunctor<cl::Buffer, cl::Buffer, cl::Buffer,cl::Buffer, cl::Buffer> collisions_kernel_t;
+    std::unique_ptr<collisions_kernel_t> m_collisions_func;
 
     std::string read_kernel(const std::string& path)
     {
@@ -97,7 +102,8 @@ public:
 
         m_forces_func = std::make_unique<forces_kernel_t>(m_program, "forces");
         m_integrate_func = std::make_unique<integrate_kernel_t>(m_program, "integrate");
-        m_steps_func = std::make_unique<steps_kernel_t>(m_program, "steps");
+        m_limit_func = std::make_unique<limit_kernel_t>(m_program, "limit");
+        m_collisions_func = std::make_unique<collisions_kernel_t>(m_program, "collisions");
     }
 
     void spawn()
@@ -114,7 +120,7 @@ public:
             sizes[i] = 0.05;
         }
 
-       // masses[0] = 10000;
+        // masses[0] = 10000;
 
         d_positions = cl::Buffer(m_context, begin(positions), end(positions), false);
         d_velocities = cl::Buffer(m_context, begin(velocities), end(velocities),false);
@@ -130,13 +136,15 @@ public:
     {
         const auto start_time = std::chrono::high_resolution_clock::now();
         try {
-            (*m_steps_func)(cl::EnqueueArgs(m_queue,particles), d_positions, d_velocities, d_accelerations, d_masses, d_sizes, G, dt, count, particles);
-            /*for(std::size_t i = 0; i < count;i++)
+            for(std::size_t i = 0; i < count;i++)
             {
-                (*m_forces_func)(cl::EnqueueArgs(m_queue,particles), d_positions, d_velocities, d_accelerations, d_masses, G, particles);
+
+             //   (*m_forces_func)(cl::EnqueueArgs(m_queue,cl::NDRange(particles,particles)), d_positions, d_velocities, d_accelerations, d_masses, G);
+                (*m_collisions_func)(cl::EnqueueArgs(m_queue,cl::NDRange(particles,particles)), d_positions, d_velocities, d_accelerations, d_sizes,d_masses);
+                (*m_limit_func)(cl::EnqueueArgs(m_queue,particles), d_positions, d_velocities,space_size);
                 (*m_integrate_func)(cl::EnqueueArgs(m_queue,particles), d_positions, d_velocities, d_accelerations, dt);
                 m_queue.finish();
-            }*/
+            }
             cl::copy(m_queue,d_positions,begin(positions), end(positions));
 
         }  catch (cl::Error & er) {

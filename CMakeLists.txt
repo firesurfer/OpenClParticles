@@ -35,7 +35,6 @@ add_custom_target(copy_kernels
 
 add_executable(fluids_cpu
     src/main.cpp
-    src/ParticleSimulation.h
 )
 
 target_link_libraries(fluids_cpu
@@ -46,7 +45,6 @@ target_link_libraries(fluids_cpu
 
 add_executable(fluids_gpu
     src/main_gpu.cpp
-    src/ParticleSimulation.h
 )
 add_dependencies(fluids_gpu copy_kernels)
 

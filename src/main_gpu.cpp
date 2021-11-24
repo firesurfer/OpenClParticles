@@ -34,9 +34,11 @@ int main(int argc, char** argv)
     vis.AddGeometry(bound_box_wireframe);
 
     auto start_time = std::chrono::high_resolution_clock::now();
+    const auto step_size = (std::size_t)(0.1/sim.dt);
+    std::cout << "Step size: " << step_size << std::endl;
     for(std::size_t i = 0; i < 500000000;)
     {
-        const auto step_size = (std::size_t)(1.0/sim.dt);
+
 
         sim.step(step_size);
         i+= step_size;
